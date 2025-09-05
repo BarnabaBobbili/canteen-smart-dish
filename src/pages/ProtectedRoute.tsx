@@ -1,10 +1,9 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Layout } from '@/components/layout/Layout';
-import Dashboard from './Dashboard';
 import { Loader2 } from 'lucide-react';
 
-const Index = () => {
+const ProtectedRoute = () => {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -21,9 +20,9 @@ const Index = () => {
 
   return (
     <Layout>
-      <Dashboard />
+      <Outlet />
     </Layout>
   );
 };
 
-export default Index;
+export default ProtectedRoute;

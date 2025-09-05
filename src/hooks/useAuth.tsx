@@ -13,6 +13,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   signInWithGoogle: () => Promise<{ error: any }>;
   signUpWithInvitation: (token: string, fullName: string, password: string) => Promise<{ error: any | null }>;
+  fetchUserProfile: (userId: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -241,6 +242,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     signOut,
     signInWithGoogle,
     signUpWithInvitation,
+    fetchUserProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

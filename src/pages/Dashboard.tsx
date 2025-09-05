@@ -32,8 +32,48 @@ interface DashboardStats {
   avg_order_value: number;
 }
 
+import { seedInitialData } from '@/lib/seeder';
+
+const WelcomeSeeder = ({ user, onSeed }: { user: User, onSeed: () => Promise<void> }) => {
+  const [loading, setLoading] = useState(false);
+
+  const handleSeed = async () => {
+    setLoading(true);
+    await onSeed();
+    // No need to set loading to false, as the page will reload.
+  };
+
+  return (
+    <Card className="mt-6">
+      <CardHeader>
+        <CardTitle>Welcome, {user.user_metadata.full_name}!</CardTitle>
+        <CardDescription>
+          Your account is ready. Let's set up your first canteen with some sample data.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-muted-foreground mb-4">
+          Click the button below to generate a sample canteen, a complete menu with categories, and some recent order history. This will help you explore the features of the application immediately.
+        </p>
+        <Button onClick={handleSeed} disabled={loading}>
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Generating...
+            </>
+          ) : (
+            'Generate Sample Canteen'
+          )}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+};
+
+
 const Dashboard = () => {
-  const { profile } = useAuth();
+  const { profile, user, fetchUserProfile } = useAuth();
+  const { toast } = useToast();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [popularItems, setPopularItems] = useState<any[]>([]);
@@ -42,6 +82,11 @@ const Dashboard = () => {
   useEffect(() => {
     if (profile?.canteen_id) {
       fetchDashboardData();
+    } else {
+      // If there is a profile but no canteen, we can stop loading.
+      if (profile) {
+        setLoading(false);
+      }
     }
   }, [profile]);
 
@@ -90,6 +135,24 @@ const Dashboard = () => {
     }
   };
 
+  const handleSeedData = async () => {
+    if (!user) return;
+    const { success, error } = await seedInitialData(user);
+    if (success) {
+      toast({
+        title: "Success!",
+        description: "Your sample canteen has been created.",
+      });
+      await fetchUserProfile(user.id);
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Seeding Failed",
+        description: "Could not create sample data. Please check the console for errors.",
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -103,6 +166,10 @@ const Dashboard = () => {
         </div>
       </div>
     );
+  }
+
+  if (profile?.role === 'owner' && !profile.canteen_id) {
+    return user ? <WelcomeSeeder user={user} onSeed={handleSeedData} /> : null;
   }
 
   return (

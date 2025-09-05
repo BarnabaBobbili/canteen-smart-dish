@@ -3,6 +3,14 @@ import { StatsCard } from '@/components/dashboard/StatsCard';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer
+} from 'recharts';
 import { 
   DollarSign, 
   ShoppingCart, 
@@ -10,29 +18,25 @@ import {
   Clock,
   TrendingUp,
   Package,
-  ChefHat
+  ChefHat,
+  Star
 } from 'lucide-react';
 
 interface DashboardStats {
-  totalRevenue: number;
-  totalOrders: number;
-  pendingOrders: number;
-  menuItems: number;
-  revenueGrowth: number;
-  ordersGrowth: number;
+  total_revenue_month: number;
+  total_orders_month: number;
+  pending_orders_total: number;
+  menu_items_total: number;
+  revenue_growth_percentage: number;
+  orders_growth_percentage: number;
+  avg_order_value: number;
 }
 
 const Dashboard = () => {
   const { profile } = useAuth();
-  const [stats, setStats] = useState<DashboardStats>({
-    totalRevenue: 0,
-    totalOrders: 0,
-    pendingOrders: 0,
-    menuItems: 0,
-    revenueGrowth: 0,
-    ordersGrowth: 0,
-  });
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
+  const [popularItems, setPopularItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -43,57 +47,31 @@ const Dashboard = () => {
 
   const fetchDashboardData = async () => {
     if (!profile?.canteen_id) return;
-
+    setLoading(true);
     try {
-      // Fetch orders for stats
-      const { data: orders } = await supabase
-        .from('orders')
-        .select('*')
-        .eq('canteen_id', profile.canteen_id);
+      const [statsResult, recentOrdersResult, popularItemsResult] = await Promise.all([
+        supabase.rpc('get_dashboard_stats', { p_canteen_id: profile.canteen_id }),
+        supabase
+          .from('orders')
+          .select('*, order_items (quantity, menu_items (name))')
+          .eq('canteen_id', profile.canteen_id)
+          .order('created_at', { ascending: false })
+          .limit(5),
+        supabase.rpc('get_popular_items', { p_canteen_id: profile.canteen_id, p_limit: 5 })
+      ]);
 
-      // Fetch menu items count
-      const { data: menuItems } = await supabase
-        .from('menu_items')
-        .select('id')
-        .eq('canteen_id', profile.canteen_id)
-        .eq('is_active', true);
-
-      // Fetch recent orders with details
-      const { data: recentOrdersData } = await supabase
-        .from('orders')
-        .select(`
-          *,
-          order_items (
-            quantity,
-            menu_items (name)
-          )
-        `)
-        .eq('canteen_id', profile.canteen_id)
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      if (orders) {
-        const totalRevenue = orders
-          .filter(order => order.status === 'completed')
-          .reduce((sum, order) => sum + Number(order.total_amount), 0);
-
-        const pendingOrders = orders.filter(order => 
-          ['pending', 'preparing'].includes(order.status)
-        ).length;
-
-        setStats({
-          totalRevenue,
-          totalOrders: orders.length,
-          pendingOrders,
-          menuItems: menuItems?.length || 0,
-          revenueGrowth: 12.5, // Mock data
-          ordersGrowth: 8.2, // Mock data
-        });
+      if (statsResult.data) {
+        setStats(statsResult.data[0]);
       }
 
-      if (recentOrdersData) {
-        setRecentOrders(recentOrdersData);
+      if (recentOrdersResult.data) {
+        setRecentOrders(recentOrdersResult.data);
       }
+
+      if (popularItemsResult.data) {
+        setPopularItems(popularItemsResult.data);
+      }
+
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
@@ -141,68 +119,70 @@ const Dashboard = () => {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatsCard
           title="Total Revenue"
-          value={`₹${stats.totalRevenue.toLocaleString()}`}
+          value={`₹${stats?.total_revenue_month?.toLocaleString() || 0}`}
           description="Total earnings this month"
           icon={DollarSign}
           trend={{
-            value: stats.revenueGrowth,
+            value: stats?.revenue_growth_percentage || 0,
             label: "from last month"
           }}
         />
         <StatsCard
           title="Total Orders"
-          value={stats.totalOrders}
-          description="Orders processed"
+          value={stats?.total_orders_month || 0}
+          description="Orders this month"
           icon={ShoppingCart}
           trend={{
-            value: stats.ordersGrowth,
+            value: stats?.orders_growth_percentage || 0,
             label: "from last month"
           }}
         />
         <StatsCard
           title="Pending Orders"
-          value={stats.pendingOrders}
+          value={stats?.pending_orders_total || 0}
           description="Orders awaiting preparation"
           icon={Clock}
         />
         <StatsCard
           title="Menu Items"
-          value={stats.menuItems}
+          value={stats?.menu_items_total || 0}
           description="Active menu items"
           icon={Package}
         />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
-              <TrendingUp className="h-5 w-5" />
-              <span>Quick Stats</span>
+              <Star className="h-5 w-5" />
+              <span>Popular Items</span>
             </CardTitle>
-            <CardDescription>
-              Key performance indicators
-            </CardDescription>
+            <CardDescription>Top 5 most ordered items this month</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Average Order Value</span>
-              <span className="font-medium">
-                ₹{stats.totalOrders > 0 ? (stats.totalRevenue / stats.totalOrders).toFixed(2) : '0'}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Completion Rate</span>
-              <span className="font-medium">95%</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Customer Satisfaction</span>
-              <span className="font-medium">4.8/5</span>
-            </div>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={popularItems} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                <XAxis
+                  dataKey="name"
+                  tick={{ fontSize: 12 }}
+                  interval={0}
+                />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip
+                  cursor={{ fill: 'rgba(128, 128, 128, 0.1)' }}
+                  contentStyle={{
+                    background: 'hsl(var(--background))',
+                    borderColor: 'hsl(var(--border))',
+                  }}
+                />
+                <Bar dataKey="order_count" name="Times Ordered" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="lg:col-span-1">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <ChefHat className="h-5 w-5" />

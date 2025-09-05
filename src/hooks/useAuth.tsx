@@ -68,27 +68,47 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const fetchUserProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase
+      const { data: profileData, error: fetchError } = await supabase
         .from('profiles')
-        .select(`
-          *,
-          canteens (
-            id,
-            name,
-            address
-          )
-        `)
+        .select(`*, canteens (id, name, address)`)
         .eq('user_id', userId)
-        .single();
+        .maybeSingle(); // Use maybeSingle() to prevent error on 0 rows
 
-      if (error) {
-        console.error('Error fetching profile:', error);
-        return;
+      if (fetchError && fetchError.code !== 'PGRST116') { // Ignore '0 rows' error
+        throw fetchError;
       }
 
-      setProfile(data);
+      if (profileData) {
+        setProfile(profileData);
+      } else {
+        // Profile doesn't exist, let's create one, especially for OAuth users
+        const { data: user, error: userError } = await supabase.auth.getUser();
+        if (userError || !user.user) {
+          throw userError || new Error('User not found');
+        }
+
+        const newProfile = {
+          user_id: user.user.id,
+          email: user.user.email || '',
+          full_name: user.user.user_metadata.full_name || 'New User',
+          role: 'owner' as const, // New users default to owner
+        };
+
+        const { data: createdProfile, error: createError } = await supabase
+          .from('profiles')
+          .insert(newProfile)
+          .select()
+          .single();
+
+        if (createError) {
+          throw createError;
+        }
+
+        setProfile(createdProfile);
+      }
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      console.error('Error fetching or creating profile:', error);
+      setProfile(null); // Ensure profile is null on error
     }
   };
 

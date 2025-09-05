@@ -67,8 +67,12 @@ const MenuManagement = () => {
   });
 
   useEffect(() => {
+    console.log("MenuManagement profile:", profile);
     if (profile?.canteen_id) {
+      console.log("MenuManagement: Canteen ID found, fetching data...");
       fetchData();
+    } else {
+      console.log("MenuManagement: No Canteen ID found.");
     }
   }, [profile]);
 

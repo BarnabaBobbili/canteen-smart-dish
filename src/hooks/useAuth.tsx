@@ -9,9 +9,10 @@ interface AuthContextType {
   profile: any | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, fullName: string, role: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, fullName: string, role: string, canteenId?: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   signInWithGoogle: () => Promise<{ error: any }>;
+  signUpWithInvitation: (token: string, fullName: string, password: string) => Promise<{ error: any | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -115,7 +116,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     return { error };
   };
 
-  const signUp = async (email: string, password: string, fullName: string, role: string) => {
+  const signUp = async (email: string, password: string, fullName: string, role: string, canteenId?: string) => {
     const redirectUrl = `${window.location.origin}/`;
     
     const { data, error } = await supabase.auth.signUp({
@@ -149,11 +150,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             email: email,
             full_name: fullName,
             role: role as any,
+            canteen_id: canteenId,
           }
         ]);
 
       if (profileError) {
         console.error('Error creating profile:', profileError);
+        // Here, we should ideally delete the created user in auth.users,
+        // but that requires admin privileges. For now, we'll just log the error.
       }
 
       toast({
@@ -196,6 +200,37 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     });
   };
 
+  const signUpWithInvitation = async (token: string, fullName: string, password: string) => {
+    // 1. Get invitation details
+    const { data: invData, error: invError } = await supabase.rpc('get_invitation_details_by_token', {
+      p_token: token,
+    });
+
+    if (invError || !invData || invData.length === 0) {
+      return { error: { message: 'Invalid or expired invitation token.' } };
+    }
+    const invitation = invData[0];
+
+    // 2. Sign up the user
+    const { error: signUpError } = await signUp(invitation.email, password, fullName, invitation.role, invitation.canteen_id);
+
+    if (signUpError) {
+      return { error: signUpError };
+    }
+
+    // 3. Mark invitation as accepted
+    const { error: acceptError } = await supabase.rpc('mark_invitation_accepted', {
+      p_token: token,
+    });
+
+    if (acceptError) {
+      // Log this error, but don't block the user. The main goal is to get them signed up.
+      console.error('Failed to mark invitation as accepted:', acceptError);
+    }
+
+    return { error: null };
+  };
+
   const value = {
     user,
     session,
@@ -205,6 +240,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     signUp,
     signOut,
     signInWithGoogle,
+    signUpWithInvitation,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

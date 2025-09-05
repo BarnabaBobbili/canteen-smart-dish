@@ -11,6 +11,7 @@ import MenuManagement from "./pages/MenuManagement";
 import OrderManagement from "./pages/OrderManagement";
 import StaffManagement from "./pages/StaffManagement";
 import Settings from "./pages/Settings";
+import AcceptInvitation from "./pages/AcceptInvitation";
 
 const queryClient = new QueryClient();
 
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="/orders" element={<OrderManagement />} />
             <Route path="/staff" element={<StaffManagement />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/auth/accept-invitation" element={<AcceptInvitation />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

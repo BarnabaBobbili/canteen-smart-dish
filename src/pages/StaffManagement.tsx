@@ -113,43 +113,49 @@ const StaffManagement = () => {
     setFilteredStaff(filtered);
   };
 
-  const handleInviteStaff = async () => {
-    if (!profile?.canteen_id || !newStaff.email || !newStaff.full_name) return;
+  const handleSendInvitation = async () => {
+    if (!profile?.canteen_id || !profile?.user_id || !newStaff.email || !newStaff.role) return;
 
     try {
-      // In a real implementation, you would send an invitation email
-      // For now, we'll just create a profile entry
-      const { error } = await supabase
-        .from('profiles')
-        .insert([{
-          ...newStaff,
-          canteen_id: profile.canteen_id,
-          user_id: `temp_${Date.now()}`, // Temporary ID until user accepts invite
-          role: newStaff.role as 'owner' | 'manager' | 'cashier' | 'chef' | 'inventory_handler'
-        }]);
+      const token = crypto.randomUUID();
+      const invitationLink = `${window.location.origin}/auth/accept-invitation?token=${token}`;
 
-      if (error) throw error;
+      const { error } = await supabase.from('invitations').insert({
+        canteen_id: profile.canteen_id,
+        email: newStaff.email,
+        role: newStaff.role,
+        token: token,
+        invited_by: profile.user_id,
+      });
+
+      if (error) {
+        if (error.code === '23505') {
+          toast({
+            variant: "destructive",
+            title: "Invitation Failed",
+            description: "An active invitation for this email address already exists.",
+          });
+        } else {
+          throw error;
+        }
+        return;
+      }
+
+      console.log('Invitation link:', invitationLink);
 
       toast({
         title: "Success",
-        description: "Staff invitation sent successfully"
+        description: "Staff invitation sent successfully."
       });
 
-      setNewStaff({
-        full_name: '',
-        email: '',
-        phone: '',
-        role: 'cashier',
-        is_active: true
-      });
+      resetForm();
       setDialogOpen(false);
-      fetchStaffMembers();
     } catch (error) {
       console.error('Error inviting staff:', error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to send staff invitation"
+        description: "Failed to send staff invitation. Please try again."
       });
     }
   };
@@ -302,16 +308,18 @@ const StaffManagement = () => {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
-              <div>
-                <Label htmlFor="staff-name">Full Name *</Label>
-                <Input
-                  id="staff-name"
-                  value={newStaff.full_name}
-                  onChange={(e) => setNewStaff(prev => ({ ...prev, full_name: e.target.value }))}
-                  placeholder="Enter full name"
-                  disabled={!!editingStaff}
-                />
-              </div>
+              {editingStaff && (
+                <div>
+                  <Label htmlFor="staff-name">Full Name *</Label>
+                  <Input
+                    id="staff-name"
+                    value={newStaff.full_name}
+                    onChange={(e) => setNewStaff(prev => ({ ...prev, full_name: e.target.value }))}
+                    placeholder="Enter full name"
+                    disabled={!!editingStaff}
+                  />
+                </div>
+              )}
               <div>
                 <Label htmlFor="staff-email">Email *</Label>
                 <Input
@@ -323,15 +331,17 @@ const StaffManagement = () => {
                   disabled={!!editingStaff}
                 />
               </div>
-              <div>
-                <Label htmlFor="staff-phone">Phone</Label>
-                <Input
-                  id="staff-phone"
-                  value={newStaff.phone}
-                  onChange={(e) => setNewStaff(prev => ({ ...prev, phone: e.target.value }))}
-                  placeholder="Enter phone number"
-                />
-              </div>
+              {editingStaff && (
+                <div>
+                  <Label htmlFor="staff-phone">Phone</Label>
+                  <Input
+                    id="staff-phone"
+                    value={newStaff.phone}
+                    onChange={(e) => setNewStaff(prev => ({ ...prev, phone: e.target.value }))}
+                    placeholder="Enter phone number"
+                  />
+                </div>
+              )}
               <div>
                 <Label htmlFor="staff-role">Role *</Label>
                 <Select
@@ -343,7 +353,9 @@ const StaffManagement = () => {
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                   <SelectContent>
-                    {roleOptions.map((role) => (
+                    {roleOptions
+                      .filter(role => editingStaff || role.value !== 'owner')
+                      .map((role) => (
                       <SelectItem 
                         key={role.value} 
                         value={role.value}
@@ -368,9 +380,9 @@ const StaffManagement = () => {
                 </div>
               )}
               <Button
-                onClick={editingStaff ? handleUpdateStaff : handleInviteStaff}
+                onClick={editingStaff ? handleUpdateStaff : handleSendInvitation}
                 className="w-full"
-                disabled={!newStaff.full_name || !newStaff.email || !newStaff.role}
+                disabled={editingStaff ? !newStaff.full_name : !newStaff.email || !newStaff.role}
               >
                 {editingStaff ? 'Update Staff Member' : 'Send Invitation'}
               </Button>

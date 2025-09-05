@@ -14,7 +14,7 @@ const Auth = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [role, setRole] = useState('cashier');
+  const [role, setRole] = useState('owner');
   const [isLoading, setIsLoading] = useState(false);
 
   if (loading) {
@@ -223,21 +223,6 @@ const Auth = () => {
                         required
                       />
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="role">Role</Label>
-                    <Select value={role} onValueChange={setRole}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select your role" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="owner">Owner</SelectItem>
-                        <SelectItem value="manager">Manager</SelectItem>
-                        <SelectItem value="cashier">Cashier</SelectItem>
-                        <SelectItem value="chef">Chef</SelectItem>
-                        <SelectItem value="inventory_handler">Inventory Handler</SelectItem>
-                      </SelectContent>
-                    </Select>
                   </div>
                   <Button 
                     type="submit" 

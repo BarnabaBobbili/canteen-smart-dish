@@ -56,12 +56,8 @@ const StaffManagement = () => {
   ];
 
   useEffect(() => {
-    console.log("StaffManagement profile:", profile);
     if (profile?.canteen_id) {
-      console.log("StaffManagement: Canteen ID found, fetching data...");
       fetchStaffMembers();
-    } else {
-      console.log("StaffManagement: No Canteen ID found.");
     }
   }, [profile]);
 

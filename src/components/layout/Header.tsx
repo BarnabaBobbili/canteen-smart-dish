@@ -10,21 +10,10 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useAuth } from '@/hooks/useAuth';
-import { LogOut, User, Settings, RefreshCw } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { LogOut, User, Settings } from 'lucide-react';
 
 export function Header() {
-  const { profile, signOut, user, fetchUserProfile } = useAuth();
-  const { toast } = useToast();
-
-  const handleRefresh = async () => {
-    if (!user) return;
-    await fetchUserProfile(user.id);
-    toast({
-      title: "Profile Refreshed",
-      description: "Your profile and permissions have been updated.",
-    });
-  };
+  const { profile, signOut } = useAuth();
 
   return (
     <header className="h-14 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
@@ -32,9 +21,6 @@ export function Header() {
         <SidebarTrigger className="-ml-1" />
         
         <div className="ml-auto flex items-center space-x-4">
-          <Button variant="ghost" size="icon" onClick={handleRefresh} title="Refresh Profile">
-            <RefreshCw className="h-4 w-4" />
-          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-8 w-8 rounded-full">

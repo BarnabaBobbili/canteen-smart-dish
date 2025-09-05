@@ -72,27 +72,25 @@ const WelcomeSeeder = ({ user, onSeed }: { user: User, onSeed: () => Promise<voi
 
 
 const Dashboard = () => {
-  const { profile, user, fetchUserProfile } = useAuth();
+  const { profile, user, fetchUserProfile, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [popularItems, setPopularItems] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isDashboardLoading, setIsDashboardLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) return; // Wait for auth to finish
+
     if (profile?.canteen_id) {
       fetchDashboardData();
     } else {
-      // If there is a profile but no canteen, we can stop loading.
-      if (profile) {
-        setLoading(false);
-      }
+      setIsDashboardLoading(false);
     }
-  }, [profile]);
+  }, [profile, authLoading]);
 
   const fetchDashboardData = async () => {
     if (!profile?.canteen_id) return;
-    setLoading(true);
     try {
       const [statsResult, recentOrdersResult, popularItemsResult] = await Promise.all([
         supabase.rpc('get_dashboard_stats', { p_canteen_id: profile.canteen_id }),
@@ -120,7 +118,7 @@ const Dashboard = () => {
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
-      setLoading(false);
+      setIsDashboardLoading(false);
     }
   };
 
@@ -153,7 +151,7 @@ const Dashboard = () => {
     }
   };
 
-  if (loading) {
+  if (authLoading || isDashboardLoading) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">

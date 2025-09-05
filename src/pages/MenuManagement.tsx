@@ -38,6 +38,7 @@ interface MenuItem {
 const MenuManagement = () => {
   const { profile } = useAuth();
   const { toast } = useToast();
+  const isChef = profile?.role === 'chef';
   const [categories, setCategories] = useState<Category[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [filteredItems, setFilteredItems] = useState<MenuItem[]>([]);
@@ -125,6 +126,77 @@ const MenuManagement = () => {
     }
 
     setFilteredItems(filtered);
+  };
+
+  const handleDeleteCategory = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this category? This might affect existing menu items.')) return;
+
+    try {
+      const { error } = await supabase
+        .from('categories')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Category deleted successfully"
+      });
+
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to delete category"
+      });
+    }
+  };
+
+  const openEditCategoryDialog = (category: Category) => {
+    setEditingCategory(category);
+    setNewCategory({
+      name: category.name,
+      description: category.description || '',
+      is_active: category.is_active,
+    });
+    setCategoryDialogOpen(true);
+  };
+
+  const handleUpdateCategory = async () => {
+    if (!editingCategory || !newCategory.name) return;
+
+    try {
+      const { error } = await supabase
+        .from('categories')
+        .update({
+          name: newCategory.name,
+          description: newCategory.description,
+          is_active: newCategory.is_active
+        })
+        .eq('id', editingCategory.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Category updated successfully"
+      });
+
+      setEditingCategory(null);
+      setNewCategory({ name: '', description: '', is_active: true });
+      setCategoryDialogOpen(false);
+      fetchData();
+    } catch (error) {
+      console.error('Error updating category:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to update category"
+      });
+    }
   };
 
   const handleCreateCategory = async () => {
@@ -227,6 +299,31 @@ const MenuManagement = () => {
     }
   };
 
+  const handleToggleAvailability = async (item: MenuItem) => {
+    try {
+      const { error } = await supabase
+        .from('menu_items')
+        .update({ is_available: !item.is_available })
+        .eq('id', item.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: `${item.name} availability updated`
+      });
+
+      fetchData();
+    } catch (error) {
+      console.error('Error updating availability:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to update availability"
+      });
+    }
+  };
+
   const handleDeleteMenuItem = async (id: string) => {
     try {
       const { error } = await supabase
@@ -301,167 +398,177 @@ const MenuManagement = () => {
           <h1 className="text-3xl font-bold">Menu Management</h1>
           <p className="text-muted-foreground">Manage your menu categories and items</p>
         </div>
-        <div className="flex space-x-2">
-          <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline">
-                <Tag className="mr-2 h-4 w-4" />
-                Add Category
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create New Category</DialogTitle>
-                <DialogDescription>Add a new category to organize your menu items</DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="category-name">Name</Label>
-                  <Input
-                    id="category-name"
-                    value={newCategory.name}
-                    onChange={(e) => setNewCategory(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="Category name"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="category-description">Description</Label>
-                  <Textarea
-                    id="category-description"
-                    value={newCategory.description}
-                    onChange={(e) => setNewCategory(prev => ({ ...prev, description: e.target.value }))}
-                    placeholder="Category description"
-                  />
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    checked={newCategory.is_active}
-                    onCheckedChange={(checked) => setNewCategory(prev => ({ ...prev, is_active: checked }))}
-                  />
-                  <Label>Active</Label>
-                </div>
-                <Button onClick={handleCreateCategory} className="w-full">
-                  Create Category
+        {!isChef && (
+          <div className="flex space-x-2">
+            <Dialog open={categoryDialogOpen} onOpenChange={(open) => {
+              setCategoryDialogOpen(open);
+              if (!open) {
+                setEditingCategory(null);
+                setNewCategory({ name: '', description: '', is_active: true });
+              }
+            }}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <Tag className="mr-2 h-4 w-4" />
+                  Add Category
                 </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-
-          <Dialog open={dialogOpen} onOpenChange={(open) => {
-            setDialogOpen(open);
-            if (!open) resetForm();
-          }}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Menu Item
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>{editingItem ? 'Edit Menu Item' : 'Create New Menu Item'}</DialogTitle>
-                <DialogDescription>
-                  {editingItem ? 'Update the menu item details' : 'Add a new item to your menu'}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4">
-                <div className="grid grid-cols-2 gap-4">
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>{editingCategory ? 'Edit Category' : 'Create New Category'}</DialogTitle>
+                  <DialogDescription>
+                    {editingCategory ? 'Update the category details' : 'Add a new category to organize your menu items'}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
                   <div>
-                    <Label htmlFor="item-name">Name *</Label>
+                    <Label htmlFor="category-name">Name</Label>
                     <Input
-                      id="item-name"
-                      value={newMenuItem.name}
-                      onChange={(e) => setNewMenuItem(prev => ({ ...prev, name: e.target.value }))}
-                      placeholder="Item name"
+                      id="category-name"
+                      value={newCategory.name}
+                      onChange={(e) => setNewCategory(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="Category name"
                     />
                   </div>
                   <div>
-                    <Label htmlFor="item-price">Price (₹) *</Label>
-                    <Input
-                      id="item-price"
-                      type="number"
-                      step="0.01"
-                      value={newMenuItem.price}
-                      onChange={(e) => setNewMenuItem(prev => ({ ...prev, price: parseFloat(e.target.value) || 0 }))}
-                      placeholder="0.00"
+                    <Label htmlFor="category-description">Description</Label>
+                    <Textarea
+                      id="category-description"
+                      value={newCategory.description}
+                      onChange={(e) => setNewCategory(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Category description"
                     />
                   </div>
-                </div>
-                <div>
-                  <Label htmlFor="item-category">Category *</Label>
-                  <Select
-                    value={newMenuItem.category_id}
-                    onValueChange={(value) => setNewMenuItem(prev => ({ ...prev, category_id: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map((category) => (
-                        <SelectItem key={category.id} value={category.id}>
-                          {category.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="item-description">Description</Label>
-                  <Textarea
-                    id="item-description"
-                    value={newMenuItem.description}
-                    onChange={(e) => setNewMenuItem(prev => ({ ...prev, description: e.target.value }))}
-                    placeholder="Item description"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="prep-time">Preparation Time (minutes)</Label>
-                    <Input
-                      id="prep-time"
-                      type="number"
-                      value={newMenuItem.preparation_time}
-                      onChange={(e) => setNewMenuItem(prev => ({ ...prev, preparation_time: parseInt(e.target.value) || 0 }))}
-                      placeholder="0"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="image-url">Image URL</Label>
-                    <Input
-                      id="image-url"
-                      value={newMenuItem.image_url}
-                      onChange={(e) => setNewMenuItem(prev => ({ ...prev, image_url: e.target.value }))}
-                      placeholder="https://..."
-                    />
-                  </div>
-                </div>
-                <div className="flex space-x-4">
                   <div className="flex items-center space-x-2">
                     <Switch
-                      checked={newMenuItem.is_active}
-                      onCheckedChange={(checked) => setNewMenuItem(prev => ({ ...prev, is_active: checked }))}
+                      checked={newCategory.is_active}
+                      onCheckedChange={(checked) => setNewCategory(prev => ({ ...prev, is_active: checked }))}
                     />
                     <Label>Active</Label>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      checked={newMenuItem.is_available}
-                      onCheckedChange={(checked) => setNewMenuItem(prev => ({ ...prev, is_available: checked }))}
-                    />
-                    <Label>Available</Label>
-                  </div>
+                  <Button onClick={editingCategory ? handleUpdateCategory : handleCreateCategory} className="w-full">
+                    {editingCategory ? 'Update Category' : 'Create Category'}
+                  </Button>
                 </div>
-                <Button
-                  onClick={editingItem ? handleUpdateMenuItem : handleCreateMenuItem}
-                  className="w-full"
-                  disabled={!newMenuItem.name || !newMenuItem.category_id}
-                >
-                  {editingItem ? 'Update Item' : 'Create Item'}
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={dialogOpen} onOpenChange={(open) => {
+              setDialogOpen(open);
+              if (!open) resetForm();
+            }}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Menu Item
                 </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>{editingItem ? 'Edit Menu Item' : 'Create New Menu Item'}</DialogTitle>
+                  <DialogDescription>
+                    {editingItem ? 'Update the menu item details' : 'Add a new item to your menu'}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="item-name">Name *</Label>
+                      <Input
+                        id="item-name"
+                        value={newMenuItem.name}
+                        onChange={(e) => setNewMenuItem(prev => ({ ...prev, name: e.target.value }))}
+                        placeholder="Item name"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="item-price">Price (₹) *</Label>
+                      <Input
+                        id="item-price"
+                        type="number"
+                        step="0.01"
+                        value={newMenuItem.price}
+                        onChange={(e) => setNewMenuItem(prev => ({ ...prev, price: parseFloat(e.target.value) || 0 }))}
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="item-category">Category *</Label>
+                    <Select
+                      value={newMenuItem.category_id}
+                      onValueChange={(value) => setNewMenuItem(prev => ({ ...prev, category_id: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map((category) => (
+                          <SelectItem key={category.id} value={category.id}>
+                            {category.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="item-description">Description</Label>
+                    <Textarea
+                      id="item-description"
+                      value={newMenuItem.description}
+                      onChange={(e) => setNewMenuItem(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Item description"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="prep-time">Preparation Time (minutes)</Label>
+                      <Input
+                        id="prep-time"
+                        type="number"
+                        value={newMenuItem.preparation_time}
+                        onChange={(e) => setNewMenuItem(prev => ({ ...prev, preparation_time: parseInt(e.target.value) || 0 }))}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="image-url">Image URL</Label>
+                      <Input
+                        id="image-url"
+                        value={newMenuItem.image_url}
+                        onChange={(e) => setNewMenuItem(prev => ({ ...prev, image_url: e.target.value }))}
+                        placeholder="https://..."
+                      />
+                    </div>
+                  </div>
+                  <div className="flex space-x-4">
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        checked={newMenuItem.is_active}
+                        onCheckedChange={(checked) => setNewMenuItem(prev => ({ ...prev, is_active: checked }))}
+                      />
+                      <Label>Active</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        checked={newMenuItem.is_available}
+                        onCheckedChange={(checked) => setNewMenuItem(prev => ({ ...prev, is_available: checked }))}
+                      />
+                      <Label>Available</Label>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={editingItem ? handleUpdateMenuItem : handleCreateMenuItem}
+                    className="w-full"
+                    disabled={!newMenuItem.name || !newMenuItem.category_id}
+                  >
+                    {editingItem ? 'Update Item' : 'Create Item'}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4">
@@ -492,7 +599,7 @@ const MenuManagement = () => {
       <Tabs defaultValue="items" className="space-y-4">
         <TabsList>
           <TabsTrigger value="items">Menu Items ({filteredItems.length})</TabsTrigger>
-          <TabsTrigger value="categories">Categories ({categories.length})</TabsTrigger>
+          {!isChef && <TabsTrigger value="categories">Categories ({categories.length})</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="items">
@@ -507,27 +614,39 @@ const MenuManagement = () => {
                         {item.description}
                       </CardDescription>
                     </div>
-                    <div className="flex space-x-1">
-                      <Button variant="ghost" size="sm" onClick={() => openEditDialog(item)}>
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => handleDeleteMenuItem(item.id)}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    {!isChef && (
+                      <div className="flex space-x-1">
+                        <Button variant="ghost" size="sm" onClick={() => openEditDialog(item)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteMenuItem(item.id)}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-2xl font-bold">₹{item.price}</span>
-                    <Badge variant={item.is_available ? "default" : "secondary"}>
-                      {item.is_available ? "Available" : "Unavailable"}
-                    </Badge>
+                    {isChef ? (
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          checked={item.is_available}
+                          onCheckedChange={() => handleToggleAvailability(item)}
+                        />
+                        <Label>{item.is_available ? "Available" : "Unavailable"}</Label>
+                      </div>
+                    ) : (
+                      <Badge variant={item.is_available ? "default" : "secondary"}>
+                        {item.is_available ? "Available" : "Unavailable"}
+                      </Badge>
+                    )}
                   </div>
                   <div className="flex items-center justify-between text-sm text-muted-foreground">
                     <span>{item.categories?.name}</span>
@@ -563,13 +682,28 @@ const MenuManagement = () => {
             {categories.map((category) => (
               <Card key={category.id}>
                 <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    {category.name}
-                    <Badge variant={category.is_active ? "default" : "secondary"}>
-                      {category.is_active ? "Active" : "Inactive"}
-                    </Badge>
-                  </CardTitle>
-                  <CardDescription>{category.description}</CardDescription>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <CardTitle>{category.name}</CardTitle>
+                      <CardDescription>{category.description}</CardDescription>
+                    </div>
+                    <div className="flex space-x-1">
+                      <Button variant="ghost" size="sm" onClick={() => openEditCategoryDialog(category)}>
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteCategory(category.id)}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <Badge variant={category.is_active ? "default" : "secondary"}>
+                    {category.is_active ? "Active" : "Inactive"}
+                  </Badge>
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-muted-foreground">

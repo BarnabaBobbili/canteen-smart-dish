@@ -9,11 +9,9 @@ interface AuthContextType {
   profile: any | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, fullName: string, role: string, canteenId?: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, fullName: string, role: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
   signInWithGoogle: () => Promise<{ error: any }>;
-  signUpWithInvitation: (token: string, fullName: string, password: string) => Promise<{ error: any | null }>;
-  fetchUserProfile: (userId: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -38,79 +36,65 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const { toast } = useToast();
 
   useEffect(() => {
-    setLoading(true);
-    const handleAuthChange = async (session: Session | null) => {
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+
+        if (session?.user) {
+          // Fetch user profile with setTimeout to prevent deadlock
+          setTimeout(() => {
+            fetchUserProfile(session.user.id);
+          }, 0);
+        } else {
+          setProfile(null);
+        }
+
+        setLoading(false);
+      }
+    );
+
+    // THEN check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
 
       if (session?.user) {
-        await fetchUserProfile(session.user.id);
-      } else {
-        setProfile(null);
+        setTimeout(() => {
+          fetchUserProfile(session.user.id);
+        }, 0);
       }
-      setLoading(false);
-    };
 
-    // Check for existing session on initial load
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      handleAuthChange(session);
+      setLoading(false);
     });
 
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        handleAuthChange(session);
-      }
-    );
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
   const fetchUserProfile = async (userId: string) => {
     try {
-      const { data: profileData, error: fetchError } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
-        .select(`*, canteens (id, name, address)`)
+        .select(`
+          *,
+          canteens (
+            id,
+            name,
+            address
+          )
+        `)
         .eq('user_id', userId)
-        .maybeSingle(); // Use maybeSingle() to prevent error on 0 rows
+        .single();
 
-      if (fetchError && fetchError.code !== 'PGRST116') { // Ignore '0 rows' error
-        throw fetchError;
+      if (error) {
+        console.error('Error fetching profile:', error);
+        return;
       }
 
-      if (profileData) {
-        setProfile(profileData);
-      } else {
-        // Profile doesn't exist, let's create one, especially for OAuth users
-        const { data: user, error: userError } = await supabase.auth.getUser();
-        if (userError || !user.user) {
-          throw userError || new Error('User not found');
-        }
-
-        const newProfile = {
-          user_id: user.user.id,
-          email: user.user.email || '',
-          full_name: user.user.user_metadata.full_name || 'New User',
-          role: 'owner' as const, // New users default to owner
-        };
-
-        const { data: createdProfile, error: createError } = await supabase
-          .from('profiles')
-          .insert(newProfile)
-          .select()
-          .single();
-
-        if (createError) {
-          throw createError;
-        }
-
-        setProfile(createdProfile);
-      }
+      setProfile(data);
     } catch (error) {
-      console.error('Error fetching or creating profile:', error);
-      setProfile(null); // Ensure profile is null on error
+      console.error('Error fetching profile:', error);
     }
   };
 
@@ -131,7 +115,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     return { error };
   };
 
-  const signUp = async (email: string, password: string, fullName: string, role: string, canteenId?: string) => {
+  const signUp = async (email: string, password: string, fullName: string, role: string) => {
     const redirectUrl = `${window.location.origin}/`;
     
     const { data, error } = await supabase.auth.signUp({
@@ -165,7 +149,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             email: email,
             full_name: fullName,
             role: role as any,
-            canteen_id: canteenId
           }
         ]);
 
@@ -213,37 +196,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     });
   };
 
-  const signUpWithInvitation = async (token: string, fullName: string, password: string) => {
-    // 1. Get invitation details
-    const { data: invData, error: invError } = await supabase.rpc('get_invitation_details_by_token', {
-      p_token: token,
-    });
-
-    if (invError || !invData || invData.length === 0) {
-      return { error: { message: 'Invalid or expired invitation token.' } };
-    }
-    const invitation = invData[0];
-
-    // 2. Sign up the user
-    const { error: signUpError } = await signUp(invitation.email, password, fullName, invitation.role, invitation.canteen_id);
-
-    if (signUpError) {
-      return { error: signUpError };
-    }
-
-    // 3. Mark invitation as accepted
-    const { error: acceptError } = await supabase.rpc('mark_invitation_accepted', {
-      p_token: token,
-    });
-
-    if (acceptError) {
-      // Log this error, but don't block the user. The main goal is to get them signed up.
-      console.error('Failed to mark invitation as accepted:', acceptError);
-    }
-
-    return { error: null };
-  };
-
   const value = {
     user,
     session,
@@ -253,8 +205,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     signUp,
     signOut,
     signInWithGoogle,
-    signUpWithInvitation,
-    fetchUserProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

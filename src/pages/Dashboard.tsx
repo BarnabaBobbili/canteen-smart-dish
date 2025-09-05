@@ -34,19 +34,19 @@ interface DashboardStats {
 
 import { seedInitialData } from '@/lib/seeder';
 
-const WelcomeSeeder = ({ user, onSeed }: { user: User, onSeed: () => Promise<void> }) => {
+const WelcomeSeeder = ({ profile, onSeed }: { profile: any, onSeed: () => Promise<void> }) => {
   const [loading, setLoading] = useState(false);
 
   const handleSeed = async () => {
     setLoading(true);
     await onSeed();
-    // No need to set loading to false, as the page will reload.
+    // The page will re-render, so no need to set loading to false.
   };
 
   return (
     <Card className="mt-6">
       <CardHeader>
-        <CardTitle>Welcome, {user.user_metadata.full_name}!</CardTitle>
+        <CardTitle>Welcome, {profile?.full_name || 'Owner'}!</CardTitle>
         <CardDescription>
           Your account is ready. Let's set up your first canteen with some sample data.
         </CardDescription>
@@ -167,7 +167,7 @@ const Dashboard = () => {
   }
 
   if (profile?.role === 'owner' && !profile.canteen_id) {
-    return user ? <WelcomeSeeder user={user} onSeed={handleSeedData} /> : null;
+    return profile ? <WelcomeSeeder profile={profile} onSeed={handleSeedData} /> : null;
   }
 
   return (
